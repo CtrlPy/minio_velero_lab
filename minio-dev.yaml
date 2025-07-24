@@ -1,0 +1,56 @@
+# Deploys a new Namespace for the MinIO Pod
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: minio-dev # Change this value if you want a different namespace name
+  labels:
+    name: minio-dev # Change this value to match metadata.name
+---
+# Deploys a new MinIO Pod into the metadata.namespace Kubernetes namespace
+#
+# The `spec.containers[0].args` contains the command run on the pod
+# The `/data` directory corresponds to the `spec.containers[0].volumeMounts[0].mountPath`
+# That mount path corresponds to a Kubernetes HostPath which binds `/data` to a local drive or volume on the worker node where the pod runs
+#
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: minio
+  name: minio
+  namespace: minio-dev # Change this value to match the namespace metadata.name
+spec:
+  containers:
+  - name: minio
+    image: quay.io/minio/minio:latest
+    command:
+    - /bin/bash
+    - -c
+    args:
+    - minio server /data --console-address :9090
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    volumeMounts:
+    - mountPath: /data
+      name: localvolume # Corresponds to the `spec.volumes` Persistent Volume
+  # Add tolerations for single-node k3d cluster (allows scheduling on control-plane)
+  tolerations:
+  - key: "node-role.kubernetes.io/control-plane"
+    operator: "Exists"
+    effect: "NoSchedule"
+  - key: "node-role.kubernetes.io/master"
+    operator: "Exists"
+    effect: "NoSchedule"
+  # Remove or modify nodeSelector for k3d compatibility
+  # nodeSelector:
+  #   kubernetes.io/hostname: kubealpha.local # Comment out or change to match your k3d node
+  volumes:
+  - name: localvolume
+    hostPath: # MinIO generally recommends using locally-attached volumes
+      path: /tmp/minio-data # Changed to a more accessible path for k3d
+      type: DirectoryOrCreate # The path to the last directory must exist
